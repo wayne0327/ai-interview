@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Settings } from "lucide-react";
 import Logo from "./Logo";
 
 export default function Header() {
@@ -20,13 +20,22 @@ export default function Header() {
         </Link>
 
         {isApp ? (
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            <ArrowLeft size={15} />
-            返回首頁
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/settings"
+              className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              <Settings size={15} />
+              設定
+            </Link>
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              <ArrowLeft size={15} />
+              返回首頁
+            </Link>
+          </div>
         ) : (
           <nav className="flex items-center gap-7">
             <a
@@ -41,6 +50,13 @@ export default function Header() {
             >
               如何運作
             </a>
+            <Link
+              href="/settings"
+              className="hidden items-center gap-1.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 sm:flex dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              <Settings size={15} />
+              設定
+            </Link>
             <Link
               href="/interview"
               className="group flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 px-4 text-sm font-semibold text-white shadow-sm shadow-indigo-600/25 transition-transform hover:scale-[1.03] active:scale-[0.98]"

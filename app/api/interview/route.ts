@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-const MODEL = "gemini-3.8-flash";
 const DEFAULT_TOTAL_QUESTIONS = 3;
 const MIN_TOTAL_QUESTIONS = 1;
 const MAX_TOTAL_QUESTIONS = 10;
@@ -11,6 +10,14 @@ type ChatMessage = {
   content: string;
 };
 
+type Provider = "gemini" | "openai" | "anthropic";
+
+const DEFAULT_MODEL: Record<Provider, string> = {
+  gemini: "gemini-3.8-flash",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-sonnet-5",
+};
+
 function resolveTotalQuestions(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_TOTAL_QUESTIONS;
@@ -18,25 +25,111 @@ function resolveTotalQuestions(value: unknown): number {
   return Math.min(Math.max(rounded, MIN_TOTAL_QUESTIONS), MAX_TOTAL_QUESTIONS);
 }
 
-export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "伺服器缺少 GEMINI_API_KEY 環境變數" },
-      { status: 500 }
-    );
+async function callGemini(apiKey: string, model: string, prompt: string) {
+  const ai = new GoogleGenAI({ apiKey });
+  const result = await ai.models.generateContent({ model, contents: prompt });
+  return result.text?.trim() ?? "";
+}
+
+async function callOpenAI(apiKey: string, model: string, prompt: string) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`OpenAI API 錯誤 (${res.status})：${errBody}`);
   }
 
+  const data = await res.json();
+  return (data.choices?.[0]?.message?.content ?? "").trim();
+}
+
+async function callAnthropic(apiKey: string, model: string, prompt: string) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2048,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Anthropic API 錯誤 (${res.status})：${errBody}`);
+  }
+
+  const data = await res.json();
+  const text = data.content
+    ?.filter((block: { type: string }) => block.type === "text")
+    .map((block: { text: string }) => block.text)
+    .join("")
+    .trim();
+  return text ?? "";
+}
+
+async function callProvider(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  prompt: string
+) {
+  switch (provider) {
+    case "gemini":
+      return callGemini(apiKey, model, prompt);
+    case "openai":
+      return callOpenAI(apiKey, model, prompt);
+    case "anthropic":
+      return callAnthropic(apiKey, model, prompt);
+  }
+}
+
+export async function POST(req: NextRequest) {
   let body: {
     jobDescription?: string;
     history?: ChatMessage[];
     totalQuestions?: number;
+    provider?: string;
+    apiKey?: string;
+    model?: string;
   };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "請求格式錯誤" }, { status: 400 });
   }
+
+  const provider = body.provider as Provider;
+  if (!["gemini", "openai", "anthropic"].includes(provider)) {
+    return NextResponse.json(
+      { error: "請先在設定頁面選擇 AI 供應商" },
+      { status: 400 }
+    );
+  }
+
+  const apiKey = body.apiKey?.trim();
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "請先在設定頁面輸入你的 API Key" },
+      { status: 400 }
+    );
+  }
+
+  const model = body.model?.trim() || DEFAULT_MODEL[provider];
 
   const jobDescription = body.jobDescription?.trim() ?? "";
   const history = body.history ?? [];
@@ -102,13 +195,8 @@ ${transcript || "（尚未開始）"}
 請只輸出單一個問題的內容，使用繁體中文，不要加上編號、前言或任何多餘說明。`;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const result = await ai.models.generateContent({
-      model: MODEL,
-      contents: prompt,
-    });
+    const text = await callProvider(provider, apiKey, model, prompt);
 
-    const text = result.text?.trim();
     if (!text) {
       return NextResponse.json(
         { error: "AI 沒有回應內容，請稍後再試" },
@@ -123,10 +211,9 @@ ${transcript || "（尚未開始）"}
       totalQuestions,
     });
   } catch (error) {
-    console.error("Gemini API 呼叫失敗：", error);
-    return NextResponse.json(
-      { error: "呼叫 AI 服務時發生錯誤，請稍後再試" },
-      { status: 502 }
-    );
+    console.error(`${provider} API 呼叫失敗：`, error);
+    const message =
+      error instanceof Error ? error.message : "呼叫 AI 服務時發生錯誤，請稍後再試";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

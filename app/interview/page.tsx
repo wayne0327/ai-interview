@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Award,
   Bot,
   CheckCircle2,
+  KeyRound,
   Lightbulb,
   Loader2,
   RotateCcw,
@@ -14,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { parseFinalResult } from "../lib/parseFinalResult";
+import { loadByokSettings } from "../lib/byok";
 
 type ChatMessage = {
   role: "interviewer" | "candidate";
@@ -46,8 +49,20 @@ export default function InterviewPage() {
   } | null>(null);
   const [finalResult, setFinalResult] = useState<string | null>(null);
   const [totalQuestions, setTotalQuestions] = useState(3);
+  const [hasByok, setHasByok] = useState(true);
+
+  useEffect(() => {
+    const byok = loadByokSettings();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasByok(!!byok?.apiKey.trim());
+  }, []);
 
   async function callInterviewApi(nextHistory: ChatMessage[], totalQ: number) {
+    const byok = loadByokSettings();
+    if (!byok || !byok.apiKey.trim()) {
+      throw new Error("BYOK_MISSING");
+    }
+
     const res = await fetch("/api/interview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,6 +70,9 @@ export default function InterviewPage() {
         jobDescription,
         history: nextHistory,
         totalQuestions: totalQ,
+        provider: byok.provider,
+        apiKey: byok.apiKey,
+        model: byok.model,
       }),
     });
 
@@ -70,6 +88,12 @@ export default function InterviewPage() {
   async function startInterview() {
     if (!jobDescription.trim()) {
       setError("請先輸入職缺描述");
+      return;
+    }
+
+    const byok = loadByokSettings();
+    if (!byok || !byok.apiKey.trim()) {
+      setError("BYOK_MISSING");
       return;
     }
 
@@ -170,6 +194,16 @@ export default function InterviewPage() {
 
         {phase === "setup" && (
           <div className="flex flex-col gap-4">
+            {!hasByok && (
+              <p className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                <KeyRound size={14} className="shrink-0" />
+                尚未設定 API Key，請先前往
+                <Link href="/settings" className="font-medium underline">
+                  設定頁面
+                </Link>
+                輸入你自己的 API Key 才能開始面試。
+              </p>
+            )}
             <div className="flex flex-col gap-2">
               <label
                 htmlFor="jobDescription"
@@ -205,11 +239,22 @@ export default function InterviewPage() {
               />
             </div>
 
-            {error && (
+            {error === "BYOK_MISSING" ? (
               <p className="flex items-center gap-1.5 text-sm text-red-500">
-                <AlertTriangle size={14} />
-                {error}
+                <KeyRound size={14} />
+                請先前往
+                <Link href="/settings" className="font-medium underline">
+                  設定頁面
+                </Link>
+                輸入你的 API Key
               </p>
+            ) : (
+              error && (
+                <p className="flex items-center gap-1.5 text-sm text-red-500">
+                  <AlertTriangle size={14} />
+                  {error}
+                </p>
+              )
             )}
 
             <button

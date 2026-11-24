@@ -69,7 +69,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
             <Sparkles size={13} />
-            由 Google Gemini 驅動
+            使用你自己的 API Key · 支援 Gemini / OpenAI / Anthropic
           </span>
 
           <h1 className="mt-6 text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl md:text-6xl dark:text-zinc-50">
